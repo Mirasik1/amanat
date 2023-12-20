@@ -1,296 +1,300 @@
 import telebot
-import logging
+from telebot import types
+from telebot.handler_backends import State, StatesGroup
+from telebot.custom_filters import SimpleCustomFilter
+from telebot.storage import StateMemoryStorage
+from config import TELEGRAM_BOT_TOKEN
+from func import get_user_data, update_user_data, openai, create_table, create_db
 import requests
 from io import BytesIO
 import json
-from kz import messages as kz_msgs
-from ru import messages as ru_msgs
-from telebot import types
-from telebot.handler_backends import State, StatesGroup
-from telebot import custom_filters
-from telebot.storage import StateMemoryStorage
-from config import TELEGRAM_BOT_TOKEN
-from func import (
-    get_user_data,
-    update_user_data,
-    openai,
-    create_db,
-    insert_into_db,
-
-)
-
-
-# Initialization
-state_storage = StateMemoryStorage()
+from shapely.geometry import shape, Point
 
 create_db()
-admin_id = "1096958608"
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, state_storage=state_storage)
-
-
-# States
-class RegisterStates(StatesGroup):
-    language = State()
-    menu = State()
-
-
-class AdStates(StatesGroup):
-    photo = State()
-    geolocation = State()
-    receive = State()
-    add_info = State()
-
-
-class ManuStates(StatesGroup):
-    photo = State()
-    geolocation = State()
-    receive = State()
-    add_info = State()
-class ReportStates(StatesGroup):
-    photo = State()
-    geolocation = State()
-    receive = State()
-    add_info = State()
+create_table()
+admin_id = "894349873"
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, state_storage=StateMemoryStorage())
 
 
 
-# Additional functions
-def get_message(user_id, message_key):
-    data = get_user_data(user_id)
-    if data["language"] == "ru":
-        return ru_msgs[message_key]
+def download_image(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return BytesIO(response.content)
+    return None
+
+
+with open("data.geojson") as f:
+    data = json.load(f)
+
+for feature in data["features"]:
+    if "description" in feature["properties"]:
+        feature["properties"]["reports"] = 0
+
+with open("upd_data.geojson", "w") as f:
+    json.dump(data, f)
+
+
+def get_location(latitude, longitude):
+    try:
+        point = Point(longitude, latitude)
+        for feature in data["features"]:
+            polygon = shape(feature["geometry"])
+            if polygon.contains(point):
+                return feature["properties"]["description"]
+    except Exception as e:
+        print(e)
+        return None
+
+
+
+def update_reports(latitude, longitude):
+    point = Point(longitude, latitude)
+    for feature in data["features"]:
+        polygon = shape(feature["geometry"])
+        if polygon.contains(point):
+            feature["properties"]["reports"] += 1
+            break
+
+
+def get_user_state(message):
+    user_data = get_user_data(message.chat.id)
+    return user_data.get("state") if user_data else None
+
+
+def send_report_to_admin(admin_id, photo_url, location, response_text):
+    photo = download_image(photo_url)
+    if photo:
+        latitude, longitude = location
+        caption = f"Получена фотография от пользователя.\n{response_text}\nГеолокация пользователя: {get_location(longitude=longitude, latitude=latitude)}"
+
+        bot.send_photo(admin_id, photo, caption=caption)
     else:
-        return kz_msgs[message_key]
+        bot.send_message(admin_id, "Ошибка при загрузке фотографии.")
 
 
-# Main code
+def find_district(latitude, longitude):
+    point = Point(longitude, latitude)
+    for feature in data["features"]:
+        polygon = shape(feature["geometry"])
+        if polygon.contains(point):
+            return feature["properties"]["description"]
+    return "Район не найден"
+
+
+def update_user_state(message, state):
+    update_user_data(telegram_id=message.chat.id, state=state)
+
+
+def set_state(user_id, state):
+    pass
+
+
 @bot.message_handler(commands=["start"])
-def handle_register(message):
-    bot.send_message(message.chat.id, "👇🏻Тілді таңдаңыз / Выберите язык👇🏻")
-    bot.set_state(message.from_user.id, RegisterStates.language, message.chat.id)
-
-
-@bot.message_handler(state=RegisterStates.language)
-def handle_language_input(message):
-    insert_into_db(message.from_user.id, message.text)
-    bot.set_state(message.chat.id, RegisterStates.menu)
-
-
-@bot.message_handler(state=RegisterStates.menu)
-def menu(message):
+def send_welcome(message):
     markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton(
-        get_message(message.from_user.id, "btn_ad"), callback_data="report_ad"
-    )
-    btn2 = types.InlineKeyboardButton(
-        get_message(message.from_user.id, "btn_manu"), callback_data="report_deliver"
-    )
-
+    btn1 = types.InlineKeyboardButton(text="Русский", callback_data="ru")
+    btn2 = types.InlineKeyboardButton(text="Қазақша", callback_data="kz")
     markup.add(btn1, btn2)
     bot.send_message(
-        message.chat.id,
-        get_message(message.from_user.id, "welcome"),
-        reply_markup=markup,
+        message.chat.id, "Выберите язык👇🏻 / Тілді таңдаңыз👇🏻", reply_markup=markup
     )
 
 
-@bot.callback_query_handler(func=lambda call: call.data == "report_ad")
-def report_ad(call):
-    bot.set_state(call.from_user.id, AdStates.photo, call.message.chat.id)
-    bot.send_message(
-        call.message.chat.id, get_message(call.message.chat.id, "text_ad_photo")
-    )
+@bot.callback_query_handler(func=lambda call: call.data in ["ru", "kz"])
+def callback_inline(call):
+    language = "Русский" if call.data == "ru" else "Қазақша"
+    update_user_data(telegram_id=call.message.chat.id, language=language)
+    menu(call.message)
 
 
-@bot.message_handler(state=AdStates.photo, content_types=["photo"])
-def handle_receive_name(message):
+def menu(message):
+    user_data = get_user_data(message.chat.id)
+    if user_data:
+        language = user_data["language"]
+        markup = types.InlineKeyboardMarkup()
+        if language == "Русский":
+            btn1 = types.InlineKeyboardButton(
+                "Сообщение о незаконной рекламе", callback_data="report_ad"
+            )
+            btn2 = types.InlineKeyboardButton(
+                "Сообщение о незаконном производстве", callback_data="report_delivery"
+            )
+        elif language == "Қазақша":
+            btn1 = types.InlineKeyboardButton(
+                "Жалоба на рекламу", callback_data="report_ad"
+            )
+            btn2 = types.InlineKeyboardButton(
+                "Жалоба на производство", callback_data="report_delivery"
+            )
+        else:
+            bot.send_message(
+                message.chat.id, "Ошибка, язык не найден. Попробуйте еще раз: /start"
+            )
+            return
+
+        markup.add(btn1, btn2)
+        bot.send_message(
+            message.chat.id,
+            """Добро пожаловать в Sheker Emes Bot! 💚
+
+В данном боте вы можете анонимно сообщить о:
+
+- Случаях распространения и рекламы наркотических веществ💊
+- Факте производства наркотических веществ❗️
+
+Для выбора типа жалобы нажмите на соответствующую кнопку⬇️""",
+            reply_markup=markup,
+        )
+    else:
+        bot.send_message(
+            message.chat.id, "Ошибка, не удалось получить данные пользователя."
+        )
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback_query(call):
+    if call.data == "report_ad":
+        update_user_data(call.message.chat.id, state="AWAITING_PHOTO")
+        bot.send_message(
+            call.message.chat.id, "Пожалуйста, отправьте фотографию незаконной рекламы."
+        )
+    elif call.data=="report_delivery":
+        update_user_data(call.message.chat.id, state="AWAITING_REPORT")
+        bot.send_message(
+            call.message.chat.id, "Пожалуйста, отправьте фотографию о незаконном производстве(Прикрепите фото (не более двух). Не превышающее 10 МБ. Если нет, выберите Продолжить.)"
+        )
+    elif call.data=="Yes":
+        bot.send_message(call.message.chat.id,"Укажите любую информацию о лице:Почему у вас это вызвало подозрения? Какие доказательства можно проверить на месте/увидеть на фото (кратко)?")
+        update_user_data(call.message.chat.id,state="Text")
+    elif call.data=="No":
+        bot.send_message(call.message.chat.id,"Спасибо! ")
+
+
+@bot.message_handler(
+    content_types=["photo"],
+    func=lambda message: get_user_state(message) == "AWAITING_REPORT",
+)
+
+def handle_report(message):
     photo_id = message.photo[-1].file_id
     file_info = bot.get_file(photo_id)
     photo_url = (
         f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info.file_path}"
     )
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["photo_url"] = photo_url
-        data["type"] = "ad"
-
-    bot.set_state(message.from_user.id, AdStates.geolocation, message.chat.id)
 
 
-@bot.message_handler(state=AdStates.geolocation)
-def handle_geolocation_choice(message):
-    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    location_button = types.KeyboardButton(
-        get_message(message.from_user.id, "btn_geo_my"), request_location=True
-    )
-    point_button = types.KeyboardButton(
-        get_message(message.from_user.id, "btn_geo_other")
-    )
-    markup.add(location_button, point_button)
-
-    bot.set_state(message.chat.id, AdStates.receive)
     bot.send_message(
         message.chat.id,
-        get_message(message.from_user.id, "text_geo"),
-        reply_markup=markup,
+        "Фотография незаконной рекламы получена."
     )
 
-
-@bot.message_handler(state=ReportStates.add_info, content_types=["location"])
-def handle_location(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        longitute, latitude = message.text
-        data["longitute"] = longitute
-        data["latitude"] = latitude
-
-    bot.set_state(message.chat.id, AdStates.add_info)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    location_button = types.KeyboardButton("Отправить мою геолокацию", request_location=True)
+    map_button = types.KeyboardButton("Выбрать точку на карте(Через меню телеграмма)")
+    markup.add(location_button,map_button)
+    update_user_data(message.chat.id, state="NEW_STATE_AFTER_REPORT", photo_url=photo_url)
     bot.send_message(
         message.chat.id,
-        get_message(message.from_user.id, "text_add_info"),
-        reply_markup=markup,
+        "Теперь, пожалуйста, отправьте геолокацию через меню телеграма",
+        reply_markup=markup
     )
 
 
-@bot.message_handler(state=ReportStates.add_info)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["age"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.character, message.chat.id)
-    bot.send_message(message.chat.id, "Какие черты характера у получателя?")
-
-
-@bot.message_handler(state=ReportStates.character)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["character"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.ganre, message.chat.id)
-    bot.send_message(message.chat.id, "Какой жанр книги вы хотите увидеть?")
-
-
-@bot.message_handler(state=ReportStates.ganre)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["ganre"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.main_action, message.chat.id)
-    bot.send_message(
-        message.chat.id, "Вокруг чего должен быть построен сюжет/основное действие?"
-    )
-
-
-@bot.message_handler(state=ReportStates.main_action)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["main_action"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.dream, message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        "Какая заветная мечта у получателя книги? (Кем хочет стать, где оказаться, абсолютно всё можно реализовать в книге!)",
-    )
-
-
-@bot.message_handler(state=ReportStates.dream)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["dream"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.interest, message.chat.id)
-    bot.send_message(message.chat.id, "Увлечения получателя книги?")
-
-
-@bot.message_handler(state=ReportStates.interest)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["interest"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.fav_person, message.chat.id)
-    bot.send_message(message.chat.id, "Любимый персонаж, герой получателя книги?")
-
-
-@bot.message_handler(state=ReportStates.fav_person)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["fav_person"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.how_person, message.chat.id)
-    bot.send_message(message.chat.id, "Кем вы хотели бы видеть своего героя?")
-
-
-@bot.message_handler(state=ReportStates.how_person)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["how_person"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.world, message.chat.id)
-    bot.send_message(message.chat.id, "Где вы хотите видеть героя? (Мир книги)")
-
-
-@bot.message_handler(state=ReportStates.world)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["world"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.fav_product, message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        "Любимое произведение получателя (фильмы, сериалы, аниме, мультики, книги, комиксы...)?",
-    )
-
-
-@bot.message_handler(state=ReportStates.fav_product)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["fav_product"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.atmosphere, message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        "Какая атмосфера в книге должна быть(грустная, веселая, мистическая...)?",
-    )
-
-
-@bot.message_handler(state=ReportStates.atmosphere)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["atmosphere"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.actions, message.chat.id)
-    bot.send_message(message.chat.id, "Какое развитие действий вы хотите увидеть?")
-
-
-@bot.message_handler(state=ReportStates.actions)
-def handle_receive_name(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["actions"] = message.text
-    bot.set_state(message.from_user.id, ReportStates.ending, message.chat.id)
-    bot.send_message(message.chat.id, "Какую концовку вы хотели бы увидеть?")
-
-
-@bot.message_handler(state=ReportStates.add_data)
-def handle_add_data(message):
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
-        data["add_data"] = message.text
-        response = insert_request_data(message.from_user.id, data)
-        bot.send_message(message.chat.id, response)
-        bot.send_message(message.chat.id, "Мы создаем историю, ожидайте")
-        openai(data)
-    bot.delete_state(message.from_user.id, message.chat.id)
-
-
-# Information command
-@bot.message_handler(commands=["info"])
-def show_info(message):
-    bot.send_message(
-        message.chat.id,
-        "Это – бот SoulScript, благодаря которому Вы можете погрузиться в свою мечту и воссоздать именно тот мир, который вы хотите!",
-    )
-
-
-# Error handlers
-@bot.message_handler(state=ReportStates.age, is_digit=False)
-def age_incorrect(message):
-    bot.send_message(message.chat.id, "Вы ввели не число. Введите возраст в виде числа")
 
 
 @bot.message_handler(
-    state=ReportStates.photo, func=lambda message: "photo" not in message.content_type
+    content_types=["photo"],
+    func=lambda message: get_user_state(message) == "AWAITING_PHOTO",
 )
-def photo_incorrect(message):
-    bot.send_message(message.chat.id, "Отправьте фото")
+def handle_photo(message):
+    photo_id = message.photo[-1].file_id
+    file_info = bot.get_file(photo_id)
+    photo_url = (
+        f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info.file_path}"
+    )
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    location_button = types.KeyboardButton("Отправить мою геолокацию", request_location=True)
+    map_button = types.KeyboardButton("Выбрать точку на карте(Через меню телеграмма)")
+    markup.add(location_button,map_button)
+    update_user_data(message.chat.id, state="AWAITING_LOCATION", photo_url=photo_url)
+    bot.send_message(
+        message.chat.id,
+        "Теперь, пожалуйста, отправьте геолокацию через меню телеграма",
+        reply_markup=markup
+    )
+
+@bot.message_handler(
+    content_types=["location"],
+    func=lambda message: get_user_state(message) == "NEW_STATE_AFTER_REPORT",
+)
+def handle_location(message):
+    markup_remove = types.ReplyKeyboardRemove()
+    bot.send_message(
+        message.chat.id,
+        "Ваша геопозиция была принята",
+        reply_markup=markup_remove
+    )
+    user_data = get_user_data(message.chat.id)
+    if user_data and "photo_url" in user_data:
+        photo_url = user_data["photo_url"]
+        location = (message.location.latitude, message.location.longitude)
+        response = openai(photo_url)
+
+        send_report_to_admin(admin_id, photo_url, location, response)
+
+        bot.send_message(
+            message.chat.id, "Спасибо за ваше сообщение! Мы его рассмотрим."
+        )
+        markup=types.InlineKeyboardMarkup()
+        btn_yes=types.InlineKeyboardButton(
+                "Да", callback_data="Yes"
+            )
+        btn_no = types.InlineKeyboardButton(
+            "Нет", callback_data="No"
+        )
+        markup.add(btn_yes,btn_no)
+        bot.send_message(message.chat.id,
+                         "Знаете ли вы, кто может там проживать/кто способен вести данное производство?",reply_markup=markup)
+
+    else:
+        bot.send_message(message.chat.id, "Ошибка: фотография не найдена.")
+
+@bot.message_handler(
+    content_types=["location"],
+    func=lambda message: get_user_state(message) == "AWAITING_LOCATION",
+)
+
+def handle_location(message):
+    markup_remove = types.ReplyKeyboardRemove()
+    bot.send_message(
+        message.chat.id,
+        "Ваша геопозиция была принята",
+        reply_markup=markup_remove
+    )
+    user_data = get_user_data(message.chat.id)
+    if user_data and "photo_url" in user_data:
+        photo_url = user_data["photo_url"]
+        location = (message.location.latitude, message.location.longitude)
+        response = openai(photo_url)
+
+        send_report_to_admin(admin_id, photo_url, location, response)
+
+        bot.send_message(
+            message.chat.id, "Спасибо за ваше сообщение! Мы его рассмотрим."
+        )
+        update_user_data(message.chat.id, state=None)
+    else:
+        bot.send_message(message.chat.id, "Ошибка: фотография не найдена.")
 
 
-bot.add_custom_filter(custom_filters.StateFilter(bot))
-bot.add_custom_filter(custom_filters.IsDigitFilter())
+@bot.message_handler(commands=["info"])
+def show_info(message):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    #    for district in districts:
+       # markup.add(
+       #     types.InlineKeyboardButton(district, callback_data="district_" + district)
+       # )
+    #bot.send_message(message.chat.id, "Выберите район:", reply_markup=markup)
+    pass
 
-bot.infinity_polling(skip_pending=True)
+bot.infinity_polling()

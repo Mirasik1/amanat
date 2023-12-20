@@ -16,42 +16,36 @@ def create_db():
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            telegram_id INTEGER PRIMARY KEY,
+            state TEXT,
+            language TEXT,
+            photo_url TEXT,
+            responses INTEGER
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def create_table():
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
             telegram_id INTEGER PRIMARY KEY,
-            language TEXT
-        )
-    """
-    )
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS reports (
-            request_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            type TEXT, 
-            longitude FLOAT,
-            latitude FLOAT,
+            state TEXT,
+            language TEXT,
             photo_url TEXT,
-            add_info TEXT,
-            FOREIGN KEY(user_id) REFERENCES users(telegram_id)
+            responses INTEGER NOT NULL
         )
     """
     )
+
     conn.commit()
     conn.close()
-
-
-def generate_dalle_image(prompt):
-    try:
-        response = openai.Image.create(
-            model="image-alpha-001", prompt=prompt, n=1, size="1024x1024"
-        )
-        return response.data[0].url
-    except Exception as e:
-        print(f"Произошла ошибка при генерации изображения: {e}")
-        return None
-
 
 def openai(url):
     response = client.chat.completions.create(
@@ -62,7 +56,7 @@ def openai(url):
                 "content": [
                     {
                         "type": "text",
-                        "text": "",
+                        "text": f'Ни в коем случае не используй выражения на подобии "На изображении изображено". Распознавай потенциальные методы рекламы, например: листовки, граффити, баннеры, подозрительные надписи на стенах. Типы источников: "веб-сайт", "телеграмм канал/бот", "номер телефона". Других источников не может быть. Оценивай уверенность в корректности понимания текста (Текст полностью понятен, текст частично понятен, текст полностью не понятен). При их нахождении проверь источник на тип, дай ответ на фото ВОТ ТАК, НЕ ОТХОДИ ОТ ДАННОГО ПРИМЕРА: "Потенциальный источник:  тип источника, текст источника - Текст источника, предполагаемая ссылка: СОЗДАЙ ССЫЛКУ ПО ТИПУ - https//..., степень уверенности - оценка". Если на изображении нет подозрительных объектов, напиши "На фотографии нет подозрительных объектов."',
                     },
                     {
                         "type": "image_url",
@@ -81,6 +75,18 @@ def openai(url):
     return cloth_description
 
 
+def create_db_and_table():
+    conn = sqlite3.connect('amanat.sql')
+    cursor = conn.cursor()
+    create_table_query = '''CREATE TABLE IF NOT EXISTS users (
+                                user_id INTEGER PRIMARY KEY,
+                                preferred_language TEXT
+                            )'''
+    cursor.execute(create_table_query)
+    conn.commit()
+    conn.close()
+
+
 def get_user_data(telegram_id):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
@@ -88,7 +94,8 @@ def get_user_data(telegram_id):
     row = cursor.fetchone()
     conn.close()
     if row:
-        columns = ["telegram_id", "language"]
+        # Конвертируем кортеж в словарь
+        columns = ['telegram_id', 'state', 'language', 'photo_url', 'responses']
         return dict(zip(columns, row))
     return None
 
@@ -97,64 +104,55 @@ def update_user_data(telegram_id, **kwargs):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
 
-    fields = ", ".join([f"{key} = ?" for key in kwargs])
-    values = list(kwargs.values())
-    values.append(telegram_id)
-
-    sql = f"UPDATE users SET {fields} WHERE telegram_id = ?;"
-    cursor.execute(sql, values)
-
+    fields = ', '.join([f"{key} = :{key}" for key in kwargs])
+    sql = f"""
+        INSERT INTO users (telegram_id, {', '.join(kwargs.keys())}) VALUES (:telegram_id, {', '.join(':' + key for key in kwargs)})
+        ON CONFLICT(telegram_id) DO UPDATE SET {fields};
+    """
+    cursor.execute(sql, {'telegram_id': telegram_id, **kwargs})
     conn.commit()
     conn.close()
 
 
-def insert_into_db(telegram_id, language):
+def insert_into_db(telegram_id, nickname, responses):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
     if cursor.fetchone() is not None:
-        return
+        return "Пользователь уже зарегистрирован."
 
     cursor.execute(
-        "INSERT INTO users (telegram_id, language) VALUES (?, ?)",
-        (telegram_id, language),
+        "INSERT INTO users (telegram_id, state, language, photo_url, responses) VALUES (?, ?, ?, ?, ?)",
+        (telegram_id, nickname, state, language, responses),
     )
     conn.commit()
     conn.close()
+    return "Регистрация успешно завершена."
 
 
-def insert_report_data(telegram_id, request_data):
+def add_photo(user_id, file_id, cell_number):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
-
     cursor.execute(
-        "SELECT telegram_id FROM users WHERE telegram_id = ?", (telegram_id,)
+        "INSERT INTO photo_storage (user_id, file_id) VALUES (?, ?)",
+        (user_id, file_id, cell_number),
     )
-    user_id = cursor.fetchone()
-
-    if user_id is None:
-        conn.close()
-        return "Пользователь не найден"
-
-    request_values = (
-        user_id[0],
-        request_data.get("type"),
-        request_data.get("longitude"),
-        request_data.get("latitude"),
-        request_data.get("photo_url"),
-        request_data.get("add_info"),
-    )
-
-    cursor.execute(
-        """
-        INSERT INTO requests (
-            user_id, type, longitude, latitude, photo_url, add_info
-        ) VALUES (?, ?, ?, ?, ?, ?)
-    """,
-        request_values,
-    )
-
     conn.commit()
     conn.close()
-    return "Спасибо, что помогаете стране!"
+
+
+def list_photos():
+    conn = sqlite3.connect("photos.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM photo_storage")
+    photos = cursor.fetchall()
+
+    conn.close()
+
+    photos_list = [
+        "ID: {}, User ID: {}, File ID: {}, Cell Number: {}".format(*photo)
+        for photo in photos
+    ]
+    return "\n".join(photos_list)

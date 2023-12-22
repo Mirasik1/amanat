@@ -3,7 +3,7 @@ import sqlite3
 from config import OPEN_AI_TOKEN
 from io import BytesIO
 from openai import OpenAI
-
+import requests
 client = OpenAI(api_key=OPEN_AI_TOKEN)
 
 logging.basicConfig(
@@ -46,7 +46,11 @@ def create_table():
 
     conn.commit()
     conn.close()
-
+def download_image(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return BytesIO(response.content)
+    return None
 def openai(url):
     response = client.chat.completions.create(
         model="gpt-4-vision-preview",

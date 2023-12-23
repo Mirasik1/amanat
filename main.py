@@ -30,7 +30,7 @@ class Allstates(StatesGroup):
     send = State()
 
 def increment_report(latitude, longitude):
-    gdf = 
+    gdf = gpd.read_file("data.geojson")
     point = Point(longitude, latitude)
     selected_object = gdf[gdf.geometry.contains(point)].iloc[0]
     selected_object['report'] += 1

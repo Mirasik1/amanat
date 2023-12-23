@@ -46,11 +46,7 @@ def create_table():
 
     conn.commit()
     conn.close()
-def download_image(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        return BytesIO(response.content)
-    return None
+
 def openai(url):
     response = client.chat.completions.create(
         model="gpt-4-vision-preview",

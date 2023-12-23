@@ -2,5 +2,9 @@
 
 !main.py
 !func.py
+!map.py
+!context.py
+!languages
+!languages/*
 
 !.gitignore

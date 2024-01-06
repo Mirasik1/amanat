@@ -21,6 +21,7 @@ url = ""
 response=''
 longitude=0
 latitude=0
+
 class Allstates(StatesGroup):
     language = State()
     geo = State()
@@ -77,11 +78,11 @@ def menu(message):
     language = context.get_language_by_telegram_id(message.from_user.id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     if language == 0:
-        btn1 = types.KeyboardButton("рекламу_ру")
-        btn2 = types.KeyboardButton("производство_ру")
+        btn1 = types.KeyboardButton("Незаконной реклама📰")
+        btn2 = types.KeyboardButton("Незаконное производство🏭")
     elif language == 1:
-        btn1 = types.KeyboardButton("рекламу_Каз")
-        btn2 = types.KeyboardButton("производство_каз")
+        btn1 = types.KeyboardButton("Заңсыз жарнама📰")
+        btn2 = types.KeyboardButton("Заңсыз өндіріс🏭")
     else:
         bot.send_message(
             message.chat.id, "Ошибка, язык не найден. Попробуйте еще раз: /start"
@@ -104,8 +105,8 @@ def menu(message):
 
 
 @bot.message_handler(content_types=["text"],
-                     func=lambda message: message.text in ["рекламу_ру", "производство_ру", "рекламу_Каз",
-                                                           "производство_каз"])
+                     func=lambda message: message.text in ["Незаконной реклама📰", "Незаконное производство🏭", "Заңсыз жарнама📰",
+                                                           "Заңсыз өндіріс🏭"])
 def report(message):
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['report_type'] = message.text
@@ -137,14 +138,20 @@ def send(message):
             data['ad_info_text']=""
             context.add_response(message.chat.id, data)
             admin_text = context.get_all_reports()
-            bot.send_message(admin_id, admin_text)
+            bot.send_message(admin_id, str(data))
 
             increment_report(data['latitude'], data['longitude'])
 
 
 
 
-
+@bot.message_handler(commands=['list'])
+def send_admin(message):
+    if message.chat.id == admin_id:
+        admin_text = context.get_all_reports()
+        bot.send_message(admin_id, admin_text)
+    else:
+        pass
 @bot.message_handler(state=Allstates.additional_info_1)
 def ask_ad_info(message):
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
@@ -153,8 +160,8 @@ def ask_ad_info(message):
     bot.send_message(message.chat.id,"Спасибо за ваше сообщение мы его рассмотрим")
     context.add_response(message.chat.id, data)
     bot.set_state(message.from_user.id,Allstates.send,message.chat.id)
-    admin_text=context.get_all_reports()
-    bot.send_message(admin_id, admin_text)
+
+    bot.send_message(admin_id, str(data))
 
 
     increment_report(data['latitude'], data['longitude'])
@@ -210,18 +217,10 @@ def handle_location(message):
     except Exception as e:
         bot.send_message(message.chat.id, "Ошибка: фотография не найдена.")
 
-
-@bot.message_handler(commands=["info"])
-def show_info(message):
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    #    for district in districts:
-    # markup.add(
-    #     types.InlineKeyboardButton(district, callback_data="district_" + district)
-    # )
-    # bot.send_message(message.chat.id, "Выберите район:", reply_markup=markup)
-    pass
-
-
+@bot.message_handler(state="*", commands=['cancel'])
+def any_state(message):
+    bot.send_message(message.chat.id, "Вы отменили")
+    bot.delete_state(message.from_user.id, message.chat.id)
 @bot.message_handler(commands=["map"])
 def show_map(message):
     center_latitude = 51.1694

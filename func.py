@@ -28,24 +28,6 @@ def create_db():
     conn.commit()
     conn.close()
 
-def create_table():
-    conn = sqlite3.connect("data.db")
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            telegram_id INTEGER PRIMARY KEY,
-            state TEXT,
-            language TEXT,
-            photo_url TEXT,
-            responses INTEGER NOT NULL
-        )
-    """
-    )
-
-    conn.commit()
-    conn.close()
 
 def openai(url):
     response = client.chat.completions.create(
@@ -73,18 +55,6 @@ def openai(url):
     cloth_description = response.choices[0].message.content
 
     return cloth_description
-
-
-def create_db_and_table():
-    conn = sqlite3.connect('amanat.sql')
-    cursor = conn.cursor()
-    create_table_query = '''CREATE TABLE IF NOT EXISTS users (
-                                user_id INTEGER PRIMARY KEY,
-                                preferred_language TEXT
-                            )'''
-    cursor.execute(create_table_query)
-    conn.commit()
-    conn.close()
 
 
 def get_user_data(telegram_id):

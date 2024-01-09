@@ -17,6 +17,7 @@ def create_db():
     """)
     conn.commit()
     conn.close()
+    
 def insert_user(telegram_id, language):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
@@ -35,6 +36,7 @@ def get_language_by_telegram_id(telegram_id):
         return result[0]
     else:
         return None
+
 def change_language_by_telegram_id(telegram_id, new_language):
     with sqlite3.connect("data.db") as conn:
         cursor = conn.cursor()
@@ -62,7 +64,6 @@ def create_reports_table():
             report_type TEXT,
             response TEXT,
             ad_info TEXT,
-            ad_info_text TEXT,
             photo_url TEXT,
             longitude REAL,
             latitude REAL

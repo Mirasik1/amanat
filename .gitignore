@@ -4,7 +4,6 @@
 !func.py
 !map.py
 !context.py
-!languages
-!languages/*
+!messages.py
 
 !.gitignore

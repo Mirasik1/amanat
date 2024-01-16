@@ -1,9 +1,30 @@
-import logging
+import pandas as pd
 import sqlite3
-from config import OPEN_AI_TOKEN
-from io import BytesIO
-from openai import OpenAI
-import requests
+
+
+def fetch_reports_data():
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT * FROM reports")
+        rows = cursor.fetchall()
+        for row in rows:
+            return row
+    except Exception as e:
+        return f"Произошла ошибка: {e}"
+    finally:
+        conn.close()
+
+
+def create_excel(report_name):
+    conn = sqlite3.connect("data.db")
+    query = "SELECT * FROM reports"
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    excel_path = report_name+".xlsx"
+    df.to_excel(excel_path, index=False)
+
 
 def create_db():
     conn = sqlite3.connect("data.db")

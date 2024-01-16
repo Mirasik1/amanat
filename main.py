@@ -114,6 +114,8 @@ def report(message):
     bot.send_message(message.chat.id, 'Отправьте фотографию',reply_markup=markup_remove)
 
     bot.set_state(message.from_user.id, Allstates.photo, message.chat.id)
+
+
 @bot.message_handler(content_types=["text"],
                      func=lambda message: message.text in ["Нет", "Да"],state=Allstates.additional_info)
 def send(message):

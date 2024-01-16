@@ -195,8 +195,6 @@ def handle_location(message):
     markup_remove = types.ReplyKeyboardRemove()
 
     try:
-
-
         bot.send_message(
             message.chat.id, "Спасибо за ваше сообщение! Мы его рассмотрим.",
             reply_markup=markup_remove
@@ -217,10 +215,14 @@ def handle_location(message):
     except Exception as e:
         bot.send_message(message.chat.id, "Ошибка: фотография не найдена.")
 
+
+
 @bot.message_handler(state="*", commands=['cancel'])
 def any_state(message):
     bot.send_message(message.chat.id, "Вы отменили")
     bot.delete_state(message.from_user.id, message.chat.id)
+
+
 @bot.message_handler(commands=["map"])
 def show_map(message):
     center_latitude = 51.1694

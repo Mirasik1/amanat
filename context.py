@@ -42,7 +42,7 @@ def change_language_by_telegram_id(telegram_id, new_language):
         cursor = conn.cursor()
         try:
             if not 0 <= new_language <= 1:
-                raise ValueError("Недопустимое значение для языка. Должно быть число от 0 до 9.")
+                raise ValueError("Недопустимое значение для языка.")
             cursor.execute("UPDATE users SET language = ? WHERE telegram_id = ?", (new_language, telegram_id))
             conn.commit()
 
@@ -94,7 +94,7 @@ def add_response(telegram_id, report_data):
             report_data['ad_info_text'],
             report_data['photo_url'],
             report_data['longitude'],
-            report_data['latitude']
+            report_data['latitude'],
         ))
 
         conn.commit()

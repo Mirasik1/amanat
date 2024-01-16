@@ -8,7 +8,7 @@ from telebot.custom_filters import SimpleCustomFilter
 from telebot.storage import StateMemoryStorage
 from config import TELEGRAM_BOT_TOKEN
 from func import get_user_data, update_user_data, openai, create_db
-
+import numpy as np
 from messages import messages as msg
 
 from shapely.geometry import shape, Point
@@ -168,24 +168,55 @@ def show_map(message):
     center_longitude = 71.4491
     m = folium.Map(location=[center_latitude, center_longitude], zoom_start=12)
 
-    colormap = LinearColormap(['green', 'yellow', 'red'], vmin=0, vmax=50, index=[0, 25, 50])
-    colormap.caption = 'Кол-во'
+    data = context.get_all_reports()
+    
 
-    gdf = gpd.read_file("data.geojson")
-    gdf['report'] = gdf['report'].fillna(0)
-    gdf = gdf.sort_values(by='report')
-
-    for _, row in gdf.iterrows():
-        color = colormap(row['report'])
-        color = color[:-2]
-        folium.GeoJson(row['geometry'],
-                       style_function=lambda x, color=color: {'fillColor': color, 'color': 'none', 'weight': 0},
-                       tooltip=f"{row['description']}<br>Репортов: {int(row['report'])}").add_to(m)
-
-    m.options['clickable'] = False
+    for report in data:
+        _, report_type, _, lat, lon, , response = report
+        folium.Marker(
+            location=[lat, lon],
+            popup=f"Type: {report_type}, Description: {  }",
+            icon=folium.Icon(color="blue", icon="info-sign"),
+        ).add_to(map)
 
     m.save("index.html")
 
+@bot.message_handler(commands=["map_gen"])
+def gen_map(message):
+    crs = 'EPSG:32643'
+    
+    center_lat = 51.1694
+    center_lon = 71.4491
+    grid_size = 500
+    distance_around_center = 10000
+
+    center_point = gpd.GeoDataFrame(geometry=[Point(center_lon, center_lat)], crs='EPSG:4326')
+    center_point = center_point.to_crs(crs)
+
+    center_x, center_y = center_point.geometry.iloc[0].x, center_point.geometry.iloc[0].y
+
+    num_grids_x = int(np.ceil(distance / grid_size))
+    num_grids_y = int(np.ceil(distance / grid_size))
+
+    polygons = []
+    for i in range(-num_grids_x, num_grids_x + 1):
+        for j in range(-num_grids_y, num_grids_y + 1):
+            lower_left_x = center_x + i * grid_size
+            lower_left_y = center_y + j * grid_size
+
+            polygon = Polygon([(lower_left_x, lower_left_y),
+                               (lower_left_x + grid_size, lower_left_y),
+                               (lower_left_x + grid_size, lower_left_y + grid_size),
+                               (lower_left_x, lower_left_y + grid_size)])
+            polygons.append(polygon)
+
+    grid = gpd.GeoDataFrame({'geometry': polygons}, crs=crs)
+
+    grid = grid.to_crs('EPSG:4326')
+
+    
+
+    return grid
 
 bot.add_custom_filter(custom_filters.StateFilter(bot))
 bot.infinity_polling(skip_pending=True)

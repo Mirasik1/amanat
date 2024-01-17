@@ -7,14 +7,15 @@ from telebot.handler_backends import State, StatesGroup
 from telebot.custom_filters import SimpleCustomFilter
 from telebot.storage import StateMemoryStorage
 from config import TELEGRAM_BOT_TOKEN
-from func import get_user_data, update_user_data, openai, create_db
+from func import openai
+import func
 
 from shapely.geometry import shape, Point
-import context
+
 
 state_storage = StateMemoryStorage()
-context.create_db()
-context.create_reports_table()
+func.create_db()
+func.create_reports_table()
 admin_id = "894349873"
 bot = telebot.TeleBot("6811743988:AAEYlMWjrZIVbCvNxQ1YHBfyG7JhpyFkSOU", state_storage=state_storage)
 url = ""
@@ -65,17 +66,17 @@ def callback_inline(call):
         reply_markup=None
     )
     language = 0 if call.data == "ru" else 1
-    if context.get_language_by_telegram_id(call.message.from_user.id) == None:
-        context.insert_user(call.message.from_user.id, language)
+    if func.get_language_by_telegram_id(call.message.from_user.id) == None:
+        func.insert_user(call.message.from_user.id, language)
         menu(call.message)
     else:
-        context.change_language_by_telegram_id(call.message.from_user.id, language)
+        func.change_language_by_telegram_id(call.message.from_user.id, language)
         menu(call.message)
 
 
 def menu(message):
 
-    language = context.get_language_by_telegram_id(message.from_user.id)
+    language = func.get_language_by_telegram_id(message.from_user.id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     if language == 0:
         btn1 = types.KeyboardButton("Незаконной реклама📰")
@@ -138,8 +139,8 @@ def send(message):
             data['longitude'] = longitude
             data['latitude'] = latitude
             data['ad_info_text']=""
-            context.add_response(message.chat.id, data)
-            admin_text = context.get_all_reports()
+            func.add_response(message.chat.id, data)
+            admin_text = func.get_all_reports()
             bot.send_message(admin_id, str(data))
 
             increment_report(data['latitude'], data['longitude'])
@@ -150,25 +151,22 @@ def send(message):
 @bot.message_handler(commands=['list'])
 def send_admin(message):
     if message.chat.id == admin_id:
-        admin_text = context.get_all_reports()
+        admin_text = func.get_all_reports()
         bot.send_message(admin_id, admin_text)
     else:
         pass
+
+
 @bot.message_handler(state=Allstates.additional_info_1)
 def ask_ad_info(message):
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['ad_info_text'] = message.text
 
     bot.send_message(message.chat.id,"Спасибо за ваше сообщение мы его рассмотрим")
-    context.add_response(message.chat.id, data)
+    func.add_response(message.chat.id, data)
     bot.set_state(message.from_user.id,Allstates.send,message.chat.id)
-
     bot.send_message(admin_id, str(data))
-
-
     increment_report(data['latitude'], data['longitude'])
-
-
 
 
 @bot.message_handler(content_types=["photo"], state=Allstates.photo)
@@ -216,7 +214,6 @@ def handle_location(message):
         bot.set_state(message.from_user.id,Allstates.additional_info,message.chat.id)
     except Exception as e:
         bot.send_message(message.chat.id, "Ошибка: фотография не найдена.")
-
 
 
 @bot.message_handler(state="*", commands=['cancel'])

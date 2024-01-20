@@ -11,17 +11,18 @@ from func import openai
 import func
 
 from shapely.geometry import shape, Point
-
+from messages import messages as msg
 
 state_storage = StateMemoryStorage()
 func.create_db()
 func.create_reports_table()
 admin_id = "894349873"
-bot = telebot.TeleBot("6811743988:AAEYlMWjrZIVbCvNxQ1YHBfyG7JhpyFkSOU", state_storage=state_storage)
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, state_storage=state_storage)
 url = ""
 response=''
 longitude=0
 latitude=0
+language=0
 
 class Allstates(StatesGroup):
     language = State()
@@ -54,10 +55,17 @@ def send_welcome(message):
     )
     bot.set_state(message.from_user.id, Allstates.language, message.chat.id)
 
+@bot.message_handler(commands=['list'])
+def send_admin(message):
 
+    if message.chat.id == admin_id:
+        admin_text = func.get_all_reports()
+        bot.send_message(admin_id, admin_text)
+    else:
+        pass
 @bot.callback_query_handler(func=lambda call: call.data in ["ru", "kz"], state=Allstates.language)
 def callback_inline(call):
-
+    global language
     # Русский-0, Казахский-1
     bot.edit_message_text(
         chat_id=call.message.chat.id,
@@ -75,55 +83,38 @@ def callback_inline(call):
 
 
 def menu(message):
-
+    global language
     language = func.get_language_by_telegram_id(message.from_user.id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if language == 0:
-        btn1 = types.KeyboardButton("Незаконной реклама📰")
-        btn2 = types.KeyboardButton("Незаконное производство🏭")
-    elif language == 1:
-        btn1 = types.KeyboardButton("Заңсыз жарнама📰")
-        btn2 = types.KeyboardButton("Заңсыз өндіріс🏭")
-    else:
-        bot.send_message(
-            message.chat.id, "Ошибка, язык не найден. Попробуйте еще раз: /start"
-        )
-        return
-
+    btn1 = types.KeyboardButton(msg["btn_ad"][language])
+    btn2 = types.KeyboardButton(msg["btn_manu"][language])
     markup.add(btn1, btn2)
     bot.send_message(
         message.chat.id,
-        """Добро пожаловать в Sheker Emes Bot! 💚
-
-В данном боте вы можете анонимно сообщить о:
-
-- Случаях распространения и рекламы наркотических веществ💊
-- Факте производства наркотических веществ❗️
-
-Для выбора типа жалобы нажмите на соответствующую кнопку⬇️""",
+        msg["text_welcome"][language],
         reply_markup=markup,
     )
 
 
 @bot.message_handler(content_types=["text"],
-                     func=lambda message: message.text in ["Незаконной реклама📰", "Незаконное производство🏭", "Заңсыз жарнама📰",
-                                                           "Заңсыз өндіріс🏭"])
+                     func=lambda message: message.text in ["Незаконная реклама📰", "Заңсыз жарнама📰", "Незаконное производство🏭", "Заңсыз өндіріс🏭"])
 def report(message):
+    global language
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['report_type'] = message.text
     markup_remove = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, 'Отправьте фотографию',reply_markup=markup_remove)
+    bot.send_message(message.chat.id, msg["text_photo"][language],reply_markup=markup_remove)
 
     bot.set_state(message.from_user.id, Allstates.photo, message.chat.id)
 
 
 @bot.message_handler(content_types=["text"],
-                     func=lambda message: message.text in ["Нет", "Да"],state=Allstates.additional_info)
+                     func=lambda message: message.text in ["Нет", "Да","Жоқ","Иә"],state=Allstates.additional_info)
 def send(message):
     markup_remove = types.ReplyKeyboardRemove()
-    if message.text =="Да":
+    if message.text =="Да" or message.text =="Иә":
         bot.set_state(message.from_user.id, Allstates.additional_info_1, message.chat.id)
-        bot.send_message(message.chat.id, "Напишите допольнительную информацию",reply_markup=markup_remove)
+        bot.send_message(message.chat.id, msg["text_add_info_1"][language],reply_markup=markup_remove)
         with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
             data['ad_info'] = message.text
             data['response'] = response
@@ -131,16 +122,16 @@ def send(message):
             data['longitude'] = longitude
             data['latitude'] = latitude
     else:
-        bot.send_message(message.chat.id, "Хорошо", reply_markup=markup_remove)
+        bot.send_message(message.chat.id, msg["report_end"][language], reply_markup=markup_remove)
         with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
             data['ad_info'] = message.text
             data['response']=response
             data['photo_url'] = url
             data['longitude'] = longitude
             data['latitude'] = latitude
-            data['ad_info_text']=""
+            data['ad_info_text'] = "No"
             func.add_response(message.chat.id, data)
-            admin_text = func.get_all_reports()
+
             bot.send_message(admin_id, str(data))
 
             increment_report(data['latitude'], data['longitude'])
@@ -148,22 +139,18 @@ def send(message):
 
 
 
-@bot.message_handler(commands=['list'])
-def send_admin(message):
-    if message.chat.id == admin_id:
-        admin_text = func.get_all_reports()
-        bot.send_message(admin_id, admin_text)
-    else:
-        pass
+
 
 
 @bot.message_handler(state=Allstates.additional_info_1)
 def ask_ad_info(message):
+    global language
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['ad_info_text'] = message.text
 
-    bot.send_message(message.chat.id,"Спасибо за ваше сообщение мы его рассмотрим")
+    bot.send_message(message.chat.id,msg["report_end"][language])
     func.add_response(message.chat.id, data)
+
     bot.set_state(message.from_user.id,Allstates.send,message.chat.id)
     bot.send_message(admin_id, str(data))
     increment_report(data['latitude'], data['longitude'])
@@ -184,32 +171,28 @@ def handle_photo(message):
 
 
     bot.set_state(message.from_user.id, Allstates.geo, message.chat.id)
-    bot.send_message(message.chat.id, "Теперь, пожалуйста отправьте геолокацию через меню телеграмма")
+    bot.send_message(message.chat.id,msg["text_geo"][language])
 
 
 @bot.message_handler(content_types=["location"], state=Allstates.geo)
 def handle_location(message):
-    global longitude,latitude
+    global longitude,latitude,language
     longitude = message.location.longitude
     latitude = message.location.latitude
     markup_remove = types.ReplyKeyboardRemove()
 
     try:
-        bot.send_message(
-            message.chat.id, "Спасибо за ваше сообщение! Мы его рассмотрим.",
-            reply_markup=markup_remove
-        )
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         btn_yes = types.KeyboardButton(
-            "Да"
+            msg['yes'][language]
         )
         btn_no = types.KeyboardButton(
-            "Нет"
+            msg['no'][language]
         )
         markup.add(btn_yes, btn_no)
         bot.send_message(message.chat.id,
-                         "Знаете ли вы, кто может там проживать/кто способен вести данное производство?",
+                         msg["text_add_info"][language],
                          reply_markup=markup)
         bot.set_state(message.from_user.id,Allstates.additional_info,message.chat.id)
     except Exception as e:
@@ -218,7 +201,8 @@ def handle_location(message):
 
 @bot.message_handler(state="*", commands=['cancel'])
 def any_state(message):
-    bot.send_message(message.chat.id, "Вы отменили")
+    global language
+    bot.send_message(message.chat.id, msg["text_cancel"][language])
     bot.delete_state(message.from_user.id, message.chat.id)
 
 
@@ -249,6 +233,7 @@ def show_map(message):
 
 @bot.message_handler(commands=['excel'])
 def send_excel(message):
+    func.create_excel("reports")
     file_path = "C:/Users/Admin/PycharmProjects/amanat/reports.xlsx"
     with open(file_path, 'rb') as file:
         bot.send_document(message.chat.id, document=file)

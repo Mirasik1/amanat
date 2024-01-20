@@ -1,5 +1,8 @@
 import logging
 import sqlite3
+
+import pandas as pd
+
 from config import OPEN_AI_TOKEN
 from io import BytesIO
 from openai import OpenAI
@@ -161,6 +164,7 @@ def insert_user(telegram_id, language):
 
 
 def get_language_by_telegram_id(telegram_id):
+    telegram_id=int(telegram_id)
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
     cursor.execute("SELECT language FROM users WHERE telegram_id = ?", (telegram_id,))
@@ -201,7 +205,8 @@ def create_reports_table():
             ad_info TEXT,
             photo_url TEXT,
             longitude REAL,
-            latitude REAL
+            latitude REAL,
+            ad_info_text TEXT
         )
     """)
     conn.commit()
@@ -211,25 +216,23 @@ def create_reports_table():
 def add_response(telegram_id, report_data):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
-
     try:
-
-        required_fields = ['report_type', 'response', 'ad_info', 'ad_info_text', 'photo_url', 'longitude', 'latitude']
+        required_fields = ['report_type','ad_info', 'response','photo_url', 'longitude', 'latitude','ad_info_text']
         if not all(field in report_data for field in required_fields):
             raise ValueError("Отсутствуют обязательные поля в данных о жалобе.")
 
         cursor.execute("""
-            INSERT INTO reports (telegram_id, report_type,response, ad_info, ad_info_text, photo_url, longitude, latitude)
+            INSERT INTO reports (telegram_id, report_type, ad_info,response, photo_url,longitude, latitude, ad_info_text)
             VALUES (?, ?,?, ?, ?, ?, ?, ?)
         """, (
             telegram_id,
             report_data['report_type'],
-            report_data['response'],
             report_data['ad_info'],
-            report_data['ad_info_text'],
+            report_data['response'],
             report_data['photo_url'],
             report_data['longitude'],
-            report_data['latitude']
+            report_data['latitude'],
+            report_data['ad_info_text']
         ))
 
         conn.commit()

@@ -251,10 +251,16 @@ def get_all_reports():
 
     try:
         cursor.execute("SELECT * FROM reports")
-        rows = str(cursor.fetchall())
-
+        rows = cursor.fetchall()
         return rows
     except sqlite3.Error as e:
         print(f"Ошибка при получении данных из таблицы reports: {str(e)}")
+        return None  # Возвращаем None, чтобы указать на ошибку
     finally:
         conn.close()
+
+
+def check_language(bot,message):
+    data = bot.retrieve_data(message.from_user.id, message.chat.id)
+    language = data['language']
+    return language

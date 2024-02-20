@@ -217,13 +217,13 @@ def add_response(telegram_id, report_data):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
     try:
-        required_fields = ['report_type','ad_info', 'response','photo_url', 'longitude', 'latitude','ad_info_text']
+        required_fields = ['report_type','ad_info', 'response', 'photo_url', 'longitude', 'latitude','ad_info_text']
         if not all(field in report_data for field in required_fields):
             raise ValueError("Отсутствуют обязательные поля в данных о жалобе.")
 
         cursor.execute("""
-            INSERT INTO reports (telegram_id, report_type, ad_info,response, photo_url,longitude, latitude, ad_info_text)
-            VALUES (?, ?,?, ?, ?, ?, ?, ?)
+            INSERT INTO reports (telegram_id, report_type, ad_info,response, photo_url, longitude, latitude, ad_info_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             telegram_id,
             report_data['report_type'],
@@ -251,8 +251,7 @@ def get_all_reports():
 
     try:
         cursor.execute("SELECT * FROM reports")
-        rows = str(cursor.fetchall())
-
+        rows = cursor.fetchall()
         return rows
     except sqlite3.Error as e:
         print(f"Ошибка при получении данных из таблицы reports: {str(e)}")

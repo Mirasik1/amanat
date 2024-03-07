@@ -6,7 +6,7 @@ from telebot.storage import StateMemoryStorage
 from config import TELEGRAM_BOT_TOKEN
 import func
 from messages import messages as msg
-
+import pygeodesic
 state_storage = StateMemoryStorage()
 func.create_db()
 func.create_reports_table()
@@ -154,19 +154,41 @@ def show_map(message):
     m = folium.Map(location=[center_latitude, center_longitude], zoom_start=12)
 
     data = func.get_all_reports()
+
+    circle_centers = []
+    print(len(data))
     for report in data:
-        _, _, report_type, _, ad_info, _, longitude, latitude, ad_info_text = report
-        folium.Marker(
-            location=[latitude, longitude],
-            popup=f"Type: {report_type}, Description: {ad_info_text}",
-            icon=folium.Icon(color="blue", icon="info-sign"),
-        ).add_to(m)
+        _, _, report_type, _, _, _, longitude, latitude, _ = report
+        circle_centers.append(((latitude, longitude), 50, {report_type}))
 
-    m.save("index.html")
-    m.options['clickable'] = False
-    m.save("index.html")
+    merged_circles = []
+    for i in range(100):
+        while circle_centers:
+            base_circle = circle_centers.pop(0)
+            base_center, base_radius, base_types = base_circle
+            i = 0
+            while i < len(circle_centers):
+                compare_circle = circle_centers[i]
+                compare_center, compare_radius, compare_types = compare_circle
+                if geodesic(base_center, compare_center).meters <= (
+                        base_radius + compare_radius
+                ):
+                    new_center = (
+                        (base_center[0] + compare_center[0]) / 2,
+                        (base_center[1] + compare_center[1]) / 2,
+                    )
+                    new_radius = (
+                                         geodesic(base_center, compare_center).meters
+                                         + base_radius
+                                         + compare_radius
+                                 ) / 2
+                    base_circle = (new_center, new_radius, base_types.union(compare_types))
+                    base_center, base_radius, base_types = base_circle
+                    circle_centers.pop(i)
+                else:
+                    i += 1
 
-
+            merged_circles.append(base_circle)
 @bot.message_handler(state="*", commands=['cancel'])
 def any_state(message):
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:

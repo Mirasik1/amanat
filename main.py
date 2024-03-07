@@ -10,7 +10,7 @@ from config import TELEGRAM_BOT_TOKEN
 from func import openai
 import func
 from geopy.distance import geodesic
-
+import random
 from shapely.geometry import shape, Point
 from messages import messages as msg
 
@@ -160,6 +160,14 @@ def any_state(message):
     bot.delete_state(message.from_user.id, message.chat.id)
 
 
+def get_color_for_radius(radius):
+    if radius >= 5000:
+        return "red"
+    else:
+        green_to_red = 255 * (radius - 10) / (5000 - 10)
+        return f"#{int(green_to_red):02x}00{255-int(green_to_red):02x}"
+
+
 @bot.message_handler(commands=["map"])
 def show_map(message):
     center_latitude = 51.1694
@@ -169,47 +177,50 @@ def show_map(message):
     data = func.get_all_reports()
 
     circle_centers = []
-
+    print(len(data))
     for report in data:
         _, _, report_type, _, _, _, longitude, latitude, _ = report
-        circle_centers.append(((latitude, longitude), 100, {report_type}))
+        circle_centers.append(((latitude, longitude), 50, {report_type}))
 
     merged_circles = []
-    while circle_centers:
-        base_circle = circle_centers.pop(0)
-        base_center, base_radius, base_types = base_circle
-        i = 0
-        while i < len(circle_centers):
-            compare_circle = circle_centers[i]
-            compare_center, compare_radius, compare_types = compare_circle
-            if geodesic(base_center, compare_center).meters <= (
-                base_radius + compare_radius
-            ):
-                new_center = (
-                    (base_center[0] + compare_center[0]) / 2,
-                    (base_center[1] + compare_center[1]) / 2,
-                )
-                new_radius = (
-                    geodesic(base_center, compare_center).meters
-                    + base_radius
-                    + compare_radius
-                ) / 2
-                base_circle = (new_center, new_radius, base_types.union(compare_types))
-                base_center, base_radius, base_types = base_circle
-                circle_centers.pop(i)
-            else:
-                i += 1
-        merged_circles.append(base_circle)
+    for i in range(100):
+        while circle_centers:
+            base_circle = circle_centers.pop(0)
+            base_center, base_radius, base_types = base_circle
+            i = 0
+            while i < len(circle_centers):
+                compare_circle = circle_centers[i]
+                compare_center, compare_radius, compare_types = compare_circle
+                if geodesic(base_center, compare_center).meters <= (
+                    base_radius + compare_radius
+                ):
+                    new_center = (
+                        (base_center[0] + compare_center[0]) / 2,
+                        (base_center[1] + compare_center[1]) / 2,
+                    )
+                    new_radius = (
+                        geodesic(base_center, compare_center).meters
+                        + base_radius
+                        + compare_radius
+                    ) / 2
+                    base_circle = (new_center, new_radius, base_types.union(compare_types))
+                    base_center, base_radius, base_types = base_circle
+                    circle_centers.pop(i)
+                else:
+                    i += 1
+                    
+            merged_circles.append(base_circle)
 
     for center, radius, types in merged_circles:
+        color = get_color_for_radius(radius)
         text = f"Виды преступлений: {', '.join(types)} \n Количество преступлений: {len(types)}"
         folium.Circle(
             location=[center[0], center[1]],
             radius=radius,
             popup=text,
-            color="blue",
+            color=color,
             fill=True,
-            fill_color="blue",
+            fill_color=color,
         ).add_to(m)
 
     m.save("index.html")
@@ -260,6 +271,36 @@ def send_excel(message):
     with open(file_path, "rb") as file:
         bot.send_document(message.chat.id, document=file)
 
+
+def generate_reports():
+    for _ in range(100):
+        func.add_report(
+            {
+                "report_type": "type" + str(random.randint(1, 5)),
+                "ad_info": "ad_info",
+                "response": "response",
+                "photo_url": "url",
+                "longitude": 71.4491 + random.uniform(-0.01, 0.01),
+                "latitude": 51.1694 + random.uniform(-0.01, 0.01),
+                "ad_info_text": "ad_info_text",
+            }
+        )
+
+    for _ in range(50):
+        func.add_report(
+            {
+                "report_type": "type" + str(random.randint(1, 5)),
+                "ad_info": "ad_info",
+                "response": "response",
+                "photo_url": "url",
+                "longitude": 71.4083 + random.uniform(-0.005, 0.005),
+                "latitude": 51.0880 + random.uniform(-0.005, 0.005),
+                "ad_info_text": "ad_info_text",
+            }
+        )
+
+
+# generate_reports()
 
 bot.add_custom_filter(custom_filters.StateFilter(bot))
 bot.infinity_polling(skip_pending=True)

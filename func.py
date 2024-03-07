@@ -52,7 +52,6 @@ def get_user_data(telegram_id):
     row = cursor.fetchone()
     conn.close()
     if row:
-        # Конвертируем кортеж в словарь
         columns = ['telegram_id', 'state', 'language', 'photo_url', 'responses']
         return dict(zip(columns, row))
     return None
@@ -244,6 +243,25 @@ def add_response(telegram_id, report_data):
     finally:
         conn.close()
 
+
+def add_report(report_data):
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO reports (telegram_id, report_type, ad_info, response, photo_url, longitude, latitude, ad_info_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        894349873,
+        report_data['report_type'],
+        report_data['ad_info'],
+        report_data['response'],
+        report_data['photo_url'],
+        report_data['longitude'],
+        report_data['latitude'],
+        report_data['ad_info_text']
+    ))
+    conn.commit()
+    conn.close()
 
 def get_all_reports():
     conn = sqlite3.connect("data.db")

@@ -6,6 +6,6 @@ config.py
 !func.py
 !map.py
 !messages.py
-
+!index.html
 !.gitignore
 !requirements.txt

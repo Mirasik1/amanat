@@ -182,34 +182,52 @@ def show_map(message):
         _, _, report_type, _, _, _, longitude, latitude, _ = report
         circle_centers.append(((latitude, longitude), 50, {report_type}))
 
-    merged_circles = []
-    for i in range(100):
-        while circle_centers:
-            base_circle = circle_centers.pop(0)
-            base_center, base_radius, base_types = base_circle
-            i = 0
-            while i < len(circle_centers):
-                compare_circle = circle_centers[i]
-                compare_center, compare_radius, compare_types = compare_circle
-                if geodesic(base_center, compare_center).meters <= (
-                    base_radius + compare_radius
-                ):
-                    new_center = (
-                        (base_center[0] + compare_center[0]) / 2,
-                        (base_center[1] + compare_center[1]) / 2,
-                    )
-                    new_radius = (
-                        geodesic(base_center, compare_center).meters
-                        + base_radius
-                        + compare_radius
-                    ) / 2
-                    base_circle = (new_center, new_radius, base_types.union(compare_types))
-                    base_center, base_radius, base_types = base_circle
-                    circle_centers.pop(i)
-                else:
-                    i += 1
-                    
-            merged_circles.append(base_circle)
+    def merge_circles(circle_centers, max_iterations=10):
+        iteration = 0
+        while iteration < max_iterations:
+            merged_circles = []
+            skip_indices = set()
+
+            for i, base_circle in enumerate(circle_centers):
+                if i in skip_indices:
+                    continue
+                base_center, base_radius, base_types = base_circle
+                merged = False
+
+                for j, compare_circle in enumerate(circle_centers):
+                    if i != j and j not in skip_indices:
+                        compare_center, compare_radius, compare_types = compare_circle
+                        distance = geodesic(base_center, compare_center).meters
+
+                        # Если круги пересекаются
+                        if distance <= base_radius + compare_radius:
+                            # Находим центр между двумя кругами
+                            new_center = ((base_center[0] + compare_center[0]) / 2,
+                                          (base_center[1] + compare_center[1]) / 2)
+                            # Новый радиус будет средним увеличенным на небольшой коэффициент
+                            new_radius = (base_radius + compare_radius) / 2 * 1.05
+                            # Объединяем типы преступлений
+                            new_types = base_types.union(compare_types)
+                            merged_circles.append((new_center, new_radius, new_types))
+                            skip_indices.add(i)
+                            skip_indices.add(j)
+                            merged = True
+                            break
+
+                if not merged and i not in skip_indices:
+                    merged_circles.append(base_circle)
+
+            # Если не было слияний в этой итерации, выходим из цикла
+            if len(merged_circles) == len(circle_centers):
+                break
+            else:
+                # Переходим к следующей итерации с новым списком кругов
+                circle_centers = merged_circles
+                iteration += 1
+
+        return merged_circles
+
+    merged_circles = merge_circles(circle_centers)
 
     for center, radius, types in merged_circles:
         color = get_color_for_radius(radius)
@@ -222,8 +240,16 @@ def show_map(message):
             fill=True,
             fill_color=color,
         ).add_to(m)
-
     m.save("index.html")
+
+def get_color_for_radius(radius):
+    if radius < 100:
+        return "green"
+    elif radius < 200:
+        return "yellow"
+    else:
+        return "red"
+
 
 
 @bot.message_handler(

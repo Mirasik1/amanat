@@ -52,7 +52,6 @@ def get_user_data(telegram_id):
     row = cursor.fetchone()
     conn.close()
     if row:
-        # Конвертируем кортеж в словарь
         columns = ['telegram_id', 'state', 'language', 'photo_url', 'responses']
         return dict(zip(columns, row))
     return None
@@ -217,13 +216,13 @@ def add_response(telegram_id, report_data):
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
     try:
-        required_fields = ['report_type','ad_info', 'response','photo_url', 'longitude', 'latitude','ad_info_text']
+        required_fields = ['report_type','ad_info', 'response', 'photo_url', 'longitude', 'latitude','ad_info_text']
         if not all(field in report_data for field in required_fields):
             raise ValueError("Отсутствуют обязательные поля в данных о жалобе.")
 
         cursor.execute("""
-            INSERT INTO reports (telegram_id, report_type, ad_info,response, photo_url,longitude, latitude, ad_info_text)
-            VALUES (?, ?,?, ?, ?, ?, ?, ?)
+            INSERT INTO reports (telegram_id, report_type, ad_info,response, photo_url, longitude, latitude, ad_info_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             telegram_id,
             report_data['report_type'],
@@ -245,6 +244,25 @@ def add_response(telegram_id, report_data):
         conn.close()
 
 
+def add_report(report_data):
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO reports (telegram_id, report_type, ad_info, response, photo_url, longitude, latitude, ad_info_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        894349873,
+        report_data['report_type'],
+        report_data['ad_info'],
+        report_data['response'],
+        report_data['photo_url'],
+        report_data['longitude'],
+        report_data['latitude'],
+        report_data['ad_info_text']
+    ))
+    conn.commit()
+    conn.close()
+
 def get_all_reports():
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
@@ -255,12 +273,5 @@ def get_all_reports():
         return rows
     except sqlite3.Error as e:
         print(f"Ошибка при получении данных из таблицы reports: {str(e)}")
-        return None  # Возвращаем None, чтобы указать на ошибку
     finally:
         conn.close()
-
-
-def check_language(bot,message):
-    data = bot.retrieve_data(message.from_user.id, message.chat.id)
-    language = data['language']
-    return language

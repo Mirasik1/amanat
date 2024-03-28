@@ -55,63 +55,64 @@ def callback_inline(call):
         reply_markup=None,
     )
     language = 0 if call.data == "ru" else 1
-    if func.get_language_by_telegram_id(call.message.from_user.id) == None:
-        func.insert_user(call.message.from_user.id, language)
+    if func.get_language_by_telegram_id(call.from_user.id) == None:
+        func.insert_user(call.from_user.id, language)
     else:
-        func.change_language_by_telegram_id(call.message.from_user.id, language)
-    menu(call.message)
+        func.change_language_by_telegram_id(call.from_user.id, language)
+    menu(call)
 
 
-def menu(message):
-    language = func.get_language_by_telegram_id(message.from_user.id)
+def menu(call):
+    language = func.get_language_by_telegram_id(call.from_user.id)
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton(msg["btn_ad"][language], callback_data="ad")
     btn2 = types.InlineKeyboardButton(msg["btn_manu"][language], callback_data="manu")
 
     markup.add(btn1, btn2)
     bot.send_message(
-        message.chat.id,
+        call.message.chat.id,
         msg["text_welcome"][language],
         reply_markup=markup,
     )
-    bot.set_state(message.from_user.id, Allstates.menu, message.chat.id)
+    bot.set_state(call.from_user.id, Allstates.menu, call.message.chat.id)
 
 
 @bot.callback_query_handler(
-    func=lambda call: call.data in ["ad", "manu"], state=Allstates.language
+    func=lambda call: call.data in ["ad", "manu"], state=Allstates.menu
 )
 def report(call):
-    language = func.get_language_by_telegram_id(call.message.from_user.id)
+    language = func.get_language_by_telegram_id(call.from_user.id)
     bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=msg["text_welcome"][language],
         reply_markup=None,
     )
-    with bot.retrieve_data(call.message.from_user.id, call.message.chat.id) as data:
+    with bot.retrieve_data(call.from_user.id, call.message.chat.id) as data:
         data["report_type"] = call.data
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn_skip = types.KeyboardButton(msg["skip"][language])
     markup.add(btn_skip)
-    bot.set_state(call.message.from_user.id, Allstates.photo, call.message.chat.id)
+    bot.set_state(call.from_user.id, Allstates.photo, call.message.chat.id)
     bot.send_message(
         call.message.chat.id, msg["text_photo"][language], reply_markup=markup
     )
 
-
-@bot.message_handler(content_types=["photo"], state=Allstates.photo)
-def handle_photo(message):
+@bot.message_handler(content_types=["photo"],state=Allstates.photo)
+def photo_message(message):
+    language=func.get_language_by_telegram_id(message.from_user.id)
+    print("Message id :", message.from_user.id)
     photo_id = message.photo[-1].file_id
     file_info = bot.get_file(photo_id)
     photo_url = (
         f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info.file_path}"
     )
     bot.send_message(message.chat.id, msg["loading"][language])
-    response = openai(url)
+    response = photo_url #openai(photo_url)
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data["response"] = response
         data["photo_url"] = photo_url
-
+    print(data)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn_skip = types.KeyboardButton(msg["skip"][language])
     markup.add(btn_skip)
@@ -142,6 +143,7 @@ def handle_location(message):
 
 @bot.message_handler(content_types=["text"], state=Allstates.additional_info)
 def send(message):
+    language = func.get_language_by_telegram_id(message.from_user.id)
     markup_remove = types.ReplyKeyboardRemove()
 
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
@@ -240,7 +242,7 @@ def show_map(message):
             fill=True,
             fill_color=color,
         ).add_to(m)
-    m.save("index.html")
+    m.save("index_merged.html")
 
 def get_color_for_radius(radius):
     if radius < 100:
@@ -276,7 +278,7 @@ def skip_geo(message):
         data["longitude"] = None
         data["latitude"] = None
 
-    bot.send_message(message.chat.id, msg["text_add_info"][0])
+    bot.send_message(message.chat.id, msg["text_add_info"][language])
     bot.set_state(message.from_user.id, Allstates.additional_info, message.chat.id)
 
 

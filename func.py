@@ -81,7 +81,7 @@ def insert_into_db(telegram_id, nickname, responses):
 
     cursor.execute(
         "INSERT INTO users (telegram_id, state, language, photo_url, responses) VALUES (?, ?, ?, ?, ?)",
-        (telegram_id, nickname, state, language, responses),
+        (telegram_id, nickname, responses),
     )
     conn.commit()
     conn.close()

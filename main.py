@@ -1,17 +1,12 @@
 import telebot
 from telebot import types, custom_filters
 import folium
-from branca.colormap import LinearColormap
-import geopandas as gpd
 from telebot.handler_backends import State, StatesGroup
-from telebot.custom_filters import SimpleCustomFilter
 from telebot.storage import StateMemoryStorage
 from config import TELEGRAM_BOT_TOKEN
-from func import openai
 import func
 from geopy.distance import geodesic
 import random
-from shapely.geometry import shape, Point
 from messages import messages as msg
 
 state_storage = StateMemoryStorage()
@@ -98,21 +93,20 @@ def report(call):
         call.message.chat.id, msg["text_photo"][language], reply_markup=markup
     )
 
-@bot.message_handler(content_types=["photo"],state=Allstates.photo)
+
+@bot.message_handler(content_types=["photo"], state=Allstates.photo)
 def photo_message(message):
-    language=func.get_language_by_telegram_id(message.from_user.id)
-    print("Message id :", message.from_user.id)
+    language = func.get_language_by_telegram_id(message.from_user.id)
     photo_id = message.photo[-1].file_id
     file_info = bot.get_file(photo_id)
     photo_url = (
         f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info.file_path}"
     )
     bot.send_message(message.chat.id, msg["loading"][language])
-    response = photo_url #openai(photo_url)
+    response = photo_url  # openai(photo_url)
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data["response"] = response
         data["photo_url"] = photo_url
-    print(data)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn_skip = types.KeyboardButton(msg["skip"][language])
     markup.add(btn_skip)
@@ -144,7 +138,7 @@ def handle_location(message):
 @bot.message_handler(content_types=["text"], state=Allstates.additional_info)
 def send(message):
     language = func.get_language_by_telegram_id(message.from_user.id)
-    markup_remove = types.ReplyKeyboardRemove()
+    types.ReplyKeyboardRemove()
 
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data["ad_info"] = message.text
@@ -167,7 +161,7 @@ def get_color_for_radius(radius):
         return "red"
     else:
         green_to_red = 255 * (radius - 10) / (5000 - 10)
-        return f"#{int(green_to_red):02x}00{255-int(green_to_red):02x}"
+        return f"#{int(green_to_red):02x}00{255 - int(green_to_red):02x}"
 
 
 @bot.message_handler(commands=["map"])
@@ -179,12 +173,13 @@ def show_map(message):
     data = func.get_all_reports()
 
     circle_centers = []
-    print(len(data))
-    for report in data:
-        _, _, report_type, _, _, _, longitude, latitude, _ = report
+
+    for _report in data:
+        _, _, report_type, _, _, _, longitude, latitude, _ = _report
         circle_centers.append(((latitude, longitude), 50, {report_type}))
 
     def merge_circles(circle_centers, max_iterations=10):
+        global merged_circles
         iteration = 0
         while iteration < max_iterations:
             merged_circles = []
@@ -200,15 +195,10 @@ def show_map(message):
                     if i != j and j not in skip_indices:
                         compare_center, compare_radius, compare_types = compare_circle
                         distance = geodesic(base_center, compare_center).meters
-
-                        # Если круги пересекаются
                         if distance <= base_radius + compare_radius:
-                            # Находим центр между двумя кругами
                             new_center = ((base_center[0] + compare_center[0]) / 2,
                                           (base_center[1] + compare_center[1]) / 2)
-                            # Новый радиус будет средним увеличенным на небольшой коэффициент
                             new_radius = (base_radius + compare_radius) / 2 * 1.05
-                            # Объединяем типы преступлений
                             new_types = base_types.union(compare_types)
                             merged_circles.append((new_center, new_radius, new_types))
                             skip_indices.add(i)
@@ -219,11 +209,10 @@ def show_map(message):
                 if not merged and i not in skip_indices:
                     merged_circles.append(base_circle)
 
-            # Если не было слияний в этой итерации, выходим из цикла
             if len(merged_circles) == len(circle_centers):
                 break
             else:
-                # Переходим к следующей итерации с новым списком кругов
+
                 circle_centers = merged_circles
                 iteration += 1
 
@@ -244,7 +233,8 @@ def show_map(message):
         ).add_to(m)
     m.save("index_merged.html")
 
-def get_color_for_radius(radius):
+
+def get_colors_for_radius(radius):
     if radius < 100:
         return "green"
     elif radius < 200:
@@ -253,13 +243,11 @@ def get_color_for_radius(radius):
         return "red"
 
 
-
 @bot.message_handler(
     func=lambda message: message.text in ["Пропустить", "Өткізіп жіберу"],
     state=Allstates.photo,
 )
 def skip_photo(message):
-    language = func.get_language_by_telegram_id(message.from_user.id)
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data["response"] = None
         data["photo_url"] = None
@@ -284,7 +272,6 @@ def skip_geo(message):
 
 @bot.message_handler(commands=["list"])
 def send_admin(message):
-
     if message.chat.id == admin_id:
         admin_text = func.get_all_reports()
         bot.send_message(admin_id, admin_text)

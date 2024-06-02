@@ -319,6 +319,10 @@ def generate_reports():
 
 
 # generate_reports()
-
+@bot.message_handler(commands=["map_send"])
+def send_map(message):
+    file_path = "index_merged.html"
+    with open(file_path, "rb") as file:
+        bot.send_document(message.chat.id, document=file)
 bot.add_custom_filter(custom_filters.StateFilter(bot))
 bot.infinity_polling(skip_pending=True)

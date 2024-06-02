@@ -159,9 +159,12 @@ def any_state(message):
 def get_color_for_radius(radius):
     if radius >= 5000:
         return "red"
+    elif radius>= 2500:
+        return "yellow"
     else:
-        green_to_red = 255 * (radius - 10) / (5000 - 10)
-        return f"#{int(green_to_red):02x}00{255 - int(green_to_red):02x}"
+        return "green"
+
+
 
 
 @bot.message_handler(commands=["map"])

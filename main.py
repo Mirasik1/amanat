@@ -3,20 +3,18 @@ from telebot import types, custom_filters
 import folium
 from telebot.handler_backends import State, StatesGroup
 from telebot.storage import StateMemoryStorage
-from config import TELEGRAM_BOT_TOKEN
+from config import TELEGRAM_BOT_TOKEN, admin_id
 import func
 from geopy.distance import geodesic
-import random
 from messages import messages as msg
 
 state_storage = StateMemoryStorage()
 func.create_db()
 func.create_reports_table()
-admin_id = "894349873"
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, state_storage=state_storage)
 
 
-class Allstates(StatesGroup):
+class AllStates(StatesGroup):
     language = State()
     menu = State()
     photo = State()
@@ -36,12 +34,10 @@ def send_welcome(message):
     bot.send_message(
         message.chat.id, "Выберите язык👇🏻 / Тілді таңдаңыз👇🏻", reply_markup=markup
     )
-    bot.set_state(message.from_user.id, Allstates.language, message.chat.id)
+    bot.set_state(message.from_user.id, AllStates.language, message.chat.id)
 
 
-@bot.callback_query_handler(
-    func=lambda call: call.data in ["ru", "kz"], state=Allstates.language
-)
+@bot.callback_query_handler(func=lambda call: call.data in ["ru", "kz"], state=AllStates.language)
 def callback_inline(call):
     bot.edit_message_text(
         chat_id=call.message.chat.id,
@@ -62,19 +58,16 @@ def menu(call):
     markup = types.InlineKeyboardMarkup()
     btn1 = types.InlineKeyboardButton(msg["btn_ad"][language], callback_data="ad")
     btn2 = types.InlineKeyboardButton(msg["btn_manu"][language], callback_data="manu")
-
     markup.add(btn1, btn2)
     bot.send_message(
         call.message.chat.id,
         msg["text_welcome"][language],
         reply_markup=markup,
     )
-    bot.set_state(call.from_user.id, Allstates.menu, call.message.chat.id)
+    bot.set_state(call.from_user.id, AllStates.menu, call.message.chat.id)
 
 
-@bot.callback_query_handler(
-    func=lambda call: call.data in ["ad", "manu"], state=Allstates.menu
-)
+@bot.callback_query_handler(func=lambda call: call.data in ["ad", "manu"], state=AllStates.menu)
 def report(call):
     language = func.get_language_by_telegram_id(call.from_user.id)
     bot.edit_message_text(
@@ -88,20 +81,16 @@ def report(call):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn_skip = types.KeyboardButton(msg["skip"][language])
     markup.add(btn_skip)
-    bot.set_state(call.from_user.id, Allstates.photo, call.message.chat.id)
-    bot.send_message(
-        call.message.chat.id, msg["text_photo"][language], reply_markup=markup
-    )
+    bot.set_state(call.from_user.id, AllStates.photo, call.message.chat.id)
+    bot.send_message(call.message.chat.id, msg["text_photo"][language], reply_markup=markup)
 
 
-@bot.message_handler(content_types=["photo"], state=Allstates.photo)
+@bot.message_handler(content_types=["photo"], state=AllStates.photo)
 def photo_message(message):
     language = func.get_language_by_telegram_id(message.from_user.id)
     photo_id = message.photo[-1].file_id
     file_info = bot.get_file(photo_id)
-    photo_url = (
-        f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info.file_path}"
-    )
+    photo_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info.file_path}"
     bot.send_message(message.chat.id, msg["loading"][language])
     response = photo_url  # openai(photo_url)
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
@@ -110,11 +99,11 @@ def photo_message(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn_skip = types.KeyboardButton(msg["skip"][language])
     markup.add(btn_skip)
-    bot.set_state(message.from_user.id, Allstates.geo, message.chat.id)
+    bot.set_state(message.from_user.id, AllStates.geo, message.chat.id)
     bot.send_message(message.chat.id, msg["text_geo"][language], reply_markup=markup)
 
 
-@bot.message_handler(content_types=["location"], state=Allstates.geo)
+@bot.message_handler(content_types=["location"], state=AllStates.geo)
 def handle_location(message):
     language = func.get_language_by_telegram_id(message.from_user.id)
 
@@ -132,10 +121,10 @@ def handle_location(message):
     bot.send_message(
         message.chat.id, msg["text_add_info"][language], reply_markup=markup
     )
-    bot.set_state(message.from_user.id, Allstates.additional_info, message.chat.id)
+    bot.set_state(message.from_user.id, AllStates.additional_info, message.chat.id)
 
 
-@bot.message_handler(content_types=["text"], state=Allstates.additional_info)
+@bot.message_handler(content_types=["text"], state=AllStates.additional_info)
 def send(message):
     language = func.get_language_by_telegram_id(message.from_user.id)
     types.ReplyKeyboardRemove()
@@ -144,8 +133,8 @@ def send(message):
         data["ad_info"] = message.text
 
     bot.send_message(message.chat.id, msg["report_end"][language])
-    bot.set_state(message.from_user.id, Allstates.send, message.chat.id)
-
+    bot.set_state(message.from_user.id, AllStates.send, message.chat.id)
+    func.add_report(data)
     bot.send_message(admin_id, str(data))
 
 
@@ -157,14 +146,12 @@ def any_state(message):
 
 
 def get_color_for_radius(radius):
-    if radius >= 5000:
+    if radius >= 1000:
         return "red"
-    elif radius>= 2500:
+    elif radius >= 500:
         return "yellow"
     else:
         return "green"
-
-
 
 
 @bot.message_handler(commands=["map"])
@@ -172,11 +159,8 @@ def show_map(message):
     center_latitude = 51.1694
     center_longitude = 71.4491
     m = folium.Map(location=[center_latitude, center_longitude], zoom_start=12)
-
     data = func.get_all_reports()
-
     circle_centers = []
-
     for _report in data:
         _, _, report_type, _, _, _, longitude, latitude, _ = _report
         circle_centers.append(((latitude, longitude), 50, {report_type}))
@@ -237,18 +221,10 @@ def show_map(message):
     m.save("index_merged.html")
 
 
-def get_colors_for_radius(radius):
-    if radius < 100:
-        return "green"
-    elif radius < 200:
-        return "yellow"
-    else:
-        return "red"
-
 
 @bot.message_handler(
     func=lambda message: message.text in ["Пропустить", "Өткізіп жіберу"],
-    state=Allstates.photo,
+    state=AllStates.photo,
 )
 def skip_photo(message):
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
@@ -256,21 +232,17 @@ def skip_photo(message):
         data["photo_url"] = None
 
     bot.send_message(message.chat.id, msg["text_geo"][0])
-    bot.set_state(message.from_user.id, Allstates.geo, message.chat.id)
+    bot.set_state(message.from_user.id, AllStates.geo, message.chat.id)
 
 
-@bot.message_handler(
-    func=lambda message: message.text in ["Пропустить", "Өткізіп жіберу"],
-    state=Allstates.geo,
-)
+@bot.message_handler(func=lambda message: message.text in ["Пропустить", "Өткізіп жіберу"],state=AllStates.geo,)
 def skip_geo(message):
     language = func.get_language_by_telegram_id(message.from_user.id)
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data["longitude"] = None
         data["latitude"] = None
-
     bot.send_message(message.chat.id, msg["text_add_info"][language])
-    bot.set_state(message.from_user.id, Allstates.additional_info, message.chat.id)
+    bot.set_state(message.from_user.id, AllStates.additional_info, message.chat.id)
 
 
 @bot.message_handler(commands=["list"])
@@ -290,33 +262,6 @@ def send_excel(message):
         bot.send_document(message.chat.id, document=file)
 
 
-def generate_reports():
-    for _ in range(100):
-        func.add_report(
-            {
-                "report_type": "type" + str(random.randint(1, 5)),
-                "ad_info": "ad_info",
-                "response": "response",
-                "photo_url": "url",
-                "longitude": 71.4491 + random.uniform(-0.01, 0.01),
-                "latitude": 51.1694 + random.uniform(-0.01, 0.01),
-                "ad_info_text": "ad_info_text",
-            }
-        )
-
-    for _ in range(50):
-        func.add_report(
-            {
-                "report_type": "type" + str(random.randint(1, 5)),
-                "ad_info": "ad_info",
-                "response": "response",
-                "photo_url": "url",
-                "longitude": 71.4083 + random.uniform(-0.005, 0.005),
-                "latitude": 51.0880 + random.uniform(-0.005, 0.005),
-                "ad_info_text": "ad_info_text",
-            }
-        )
-
 
 # generate_reports()
 @bot.message_handler(commands=["map_send"])
@@ -324,5 +269,7 @@ def send_map(message):
     file_path = "index_merged.html"
     with open(file_path, "rb") as file:
         bot.send_document(message.chat.id, document=file)
+
+
 bot.add_custom_filter(custom_filters.StateFilter(bot))
 bot.infinity_polling(skip_pending=True)

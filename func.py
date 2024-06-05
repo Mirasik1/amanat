@@ -1,20 +1,11 @@
-import logging
 import sqlite3
-
 import pandas as pd
-
+import random
 from config import OPEN_AI_TOKEN
 from io import BytesIO
 from openai import OpenAI
 import requests
 client = OpenAI(api_key=OPEN_AI_TOKEN)
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-
 
 
 def openai(url):
@@ -258,10 +249,11 @@ def add_report(report_data):
         report_data['photo_url'],
         report_data['longitude'],
         report_data['latitude'],
-        report_data['ad_info_text']
+        None
     ))
     conn.commit()
     conn.close()
+
 
 def get_all_reports():
     conn = sqlite3.connect("data.db")
@@ -275,3 +267,32 @@ def get_all_reports():
         print(f"Ошибка при получении данных из таблицы reports: {str(e)}")
     finally:
         conn.close()
+
+
+def generate_reports():
+    for _ in range(100):
+        add_report(
+            {
+                "report_type": "type" + str(random.randint(1, 5)),
+                "ad_info": "ad_info",
+                "response": "response",
+                "photo_url": "url",
+                "longitude": 71.4491 + random.uniform(-0.01, 0.01),
+                "latitude": 51.1694 + random.uniform(-0.01, 0.01),
+                "ad_info_text": "ad_info_text",
+            }
+        )
+
+    for _ in range(50):
+        add_report(
+            {
+                "report_type": "type" + str(random.randint(1, 5)),
+                "ad_info": "ad_info",
+                "response": "response",
+                "photo_url": "url",
+                "longitude": 71.4083 + random.uniform(-0.005, 0.005),
+                "latitude": 51.0880 + random.uniform(-0.005, 0.005),
+                "ad_info_text": "ad_info_text",
+            }
+        )
+

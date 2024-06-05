@@ -9,3 +9,4 @@ config.py
 !index.html
 !.gitignore
 !requirements.txt
+!index_merged.html
